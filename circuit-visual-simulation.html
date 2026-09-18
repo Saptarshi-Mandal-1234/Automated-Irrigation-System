@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Irrigation Circuit — Visual Simulation</title>
+<style>
+  :root{
+    --bg:#0f1418; --panel:#171e24; --panel2:#1d262e; --border:#2a353d;
+    --accent:#3ddc97; --warn:#f2b134; --danger:#e05a5a; --text:#e8eef1; --muted:#8ea0a8; --blue:#4fa3d1;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){ --bg:#f4f7f8; --panel:#ffffff; --panel2:#eef2f3; --border:#dbe3e6; --text:#16232b; --muted:#5a6b72; }
+  }
+  :root[data-theme="dark"]{ --bg:#0f1418; --panel:#171e24; --text:#e8eef1; }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; padding:18px;}
+  h1{font-size:1.2rem; margin:0 0 2px;}
+  .sub{color:var(--muted); font-size:0.83rem; margin-bottom:14px;}
+  .wrap{display:grid; grid-template-columns: 1.4fr 0.9fr; gap:16px; max-width:1200px; margin:0 auto;}
+  @media (max-width:900px){ .wrap{grid-template-columns:1fr;} }
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px;}
+  .panel h2{font-size:0.85rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px;}
+  svg{width:100%; height:auto; display:block;}
+  .wire{stroke:#5a6b72; stroke-width:2; fill:none;}
+  .wire-power{stroke:#e05a5a;}
+  .wire-gnd{stroke:#4fa3d1;}
+  .wire-signal{stroke:#8ea0a8; stroke-dasharray:4 3;}
+  .wire-active{stroke:var(--accent); stroke-width:3;}
+  .chip{fill:var(--panel2); stroke:var(--border); stroke-width:1.5; rx:8;}
+  .lbl{fill:var(--text); font-size:11px; font-family:'Segoe UI',sans-serif;}
+  .lbl-sm{fill:var(--muted); font-size:9px;}
+  .pin{fill:#8ea0a8;}
+  .led-off{fill:#3a2020;}
+  .led-on{fill:#ff5b3d; filter:drop-shadow(0 0 8px #ff5b3d);}
+  .lcd-screen{fill:#1a2b1e; stroke:#0d1a10;}
+  .lcd-text{fill:#7dff9e; font-family: ui-monospace, monospace; font-size:9px;}
+  select, button{font-family:inherit; font-size:0.85rem; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); padding:7px 10px; cursor:pointer;}
+  button.active{background:var(--accent); color:#04241a; font-weight:600; border-color:var(--accent);}
+  .row{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;}
+  .toggle-group{display:flex; gap:6px;}
+  .toggle-group button{flex:1;}
+  input[type=range]{width:100%; accent-color:var(--blue);}
+  .slider-row{margin-bottom:12px;}
+  .status-pill{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:0.78rem; font-weight:600;}
+  .pill-on{background:rgba(61,220,151,.15); color:var(--accent);}
+  .pill-off{background:rgba(142,160,168,.15); color:var(--muted);}
+  .pill-danger{background:rgba(224,90,90,.18); color:var(--danger);}
+  .log{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:8px; height:130px; overflow-y:auto; font-size:.75rem; font-family:ui-monospace,monospace; display:flex; flex-direction:column-reverse;}
+  .log div{padding:2px 0; border-bottom:1px dashed var(--border); color:var(--muted);}
+  .log div.alert{color:var(--danger);}
+  .log div.pump{color:var(--accent);}
+  .checkbox-row{display:flex; align-items:center; gap:8px; font-size:.82rem; color:var(--muted); margin-bottom:8px;}
+</style>
+</head>
+<body>
+
+<h1>🔌 Irrigation Circuit — Live Visual Simulation</h1>
+<div class="sub">Arduino Uno wiring diagram, animated in real time as the simulated sensors and irrigation logic run — the same circuit you'd wire in Tinkercad.</div>
+
+<div class="wrap">
+
+  <div class="panel">
+    <h2>Circuit Diagram</h2>
+    <svg viewBox="0 0 760 520" xmlns="http://www.w3.org/2000/svg">
+      <!-- Arduino Uno -->
+      <rect x="290" y="180" width="180" height="160" rx="10" class="chip"/>
+      <text x="380" y="205" text-anchor="middle" class="lbl" font-weight="600">Arduino Uno</text>
+      <text x="300" y="225" class="lbl-sm">A0</text>
+      <text x="300" y="240" class="lbl-sm">A1</text>
+      <text x="300" y="255" class="lbl-sm">D2</text>
+      <text x="300" y="270" class="lbl-sm">D5</text>
+      <text x="300" y="285" class="lbl-sm">D6</text>
+      <text x="300" y="300" class="lbl-sm">D7</text>
+      <text x="450" y="225" text-anchor="end" class="lbl-sm">5V</text>
+      <text x="450" y="240" text-anchor="end" class="lbl-sm">GND</text>
+      <text x="450" y="320" text-anchor="end" class="lbl-sm">LCD pins</text>
+
+      <!-- Potentiometer 1: Soil moisture -->
+      <rect x="60" y="60" width="110" height="60" rx="8" class="chip"/>
+      <text x="115" y="80" text-anchor="middle" class="lbl">Pot 1</text>
+      <text x="115" y="94" text-anchor="middle" class="lbl-sm">Soil Moisture sim</text>
+      <circle id="pot1knob" cx="115" cy="108" r="6" fill="#4fa3d1"/>
+      <path id="wireMoist" class="wire wire-signal" d="M170,90 L290,225"/>
+
+      <!-- Potentiometer 2: pH -->
+      <rect x="60" y="150" width="110" height="60" rx="8" class="chip"/>
+      <text x="115" y="170" text-anchor="middle" class="lbl">Pot 2</text>
+      <text x="115" y="184" text-anchor="middle" class="lbl-sm">Soil pH sim</text>
+      <circle id="pot2knob" cx="115" cy="198" r="6" fill="#4fa3d1"/>
+      <path class="wire wire-signal" d="M170,180 L290,240"/>
+
+      <!-- DHT22 -->
+      <rect x="60" y="240" width="110" height="55" rx="8" class="chip"/>
+      <text x="115" y="262" text-anchor="middle" class="lbl">DHT22</text>
+      <text x="115" y="276" text-anchor="middle" class="lbl-sm">Temp / Humidity</text>
+      <path class="wire wire-signal" d="M170,265 L290,255"/>
+
+      <!-- Buttons -->
+      <rect x="60" y="330" width="90" height="40" rx="8" class="chip"/>
+      <text x="105" y="354" text-anchor="middle" class="lbl-sm">BTN Manual ON</text>
+      <path id="wireBtnOn" class="wire wire-signal" d="M150,350 L290,270"/>
+
+      <rect x="60" y="385" width="90" height="40" rx="8" class="chip"/>
+      <text x="105" y="409" text-anchor="middle" class="lbl-sm">BTN Manual OFF</text>
+      <path id="wireBtnOff" class="wire wire-signal" d="M150,405 L290,285"/>
+
+      <!-- Relay + LED (pump) -->
+      <rect x="560" y="230" width="120" height="60" rx="8" class="chip"/>
+      <text x="620" y="250" text-anchor="middle" class="lbl">Relay Module</text>
+      <text x="620" y="264" text-anchor="middle" class="lbl-sm">drives pump</text>
+      <path id="wireRelay" class="wire wire-signal" d="M470,300 L560,260"/>
+
+      <circle id="pumpLED" cx="700" cy="260" r="16" class="led-off"/>
+      <text x="700" y="300" text-anchor="middle" class="lbl-sm">Pump (LED)</text>
+      <path class="wire" d="M680,260 L684,260"/>
+
+      <!-- LCD -->
+      <rect x="220" y="400" width="300" height="90" rx="8" class="chip"/>
+      <rect x="235" y="415" width="270" height="60" rx="4" class="lcd-screen"/>
+      <text id="lcdLine1" x="245" y="438" class="lcd-text">M:--%  P:--</text>
+      <text id="lcdLine2" x="245" y="460" class="lcd-text">Pump:OFF  pH --</text>
+      <text x="370" y="500" text-anchor="middle" class="lbl-sm">16x2 LCD Display</text>
+      <path class="wire" d="M370,400 L380,340"/>
+
+      <!-- Power rails legend -->
+      <g transform="translate(560,60)">
+        <line x1="0" y1="0" x2="30" y2="0" class="wire wire-power"/>
+        <text x="36" y="4" class="lbl-sm">5V rail</text>
+        <line x1="0" y1="18" x2="30" y2="18" class="wire wire-gnd"/>
+        <text x="36" y="22" class="lbl-sm">GND rail</text>
+        <line x1="0" y1="36" x2="30" y2="36" class="wire wire-signal"/>
+        <text x="36" y="40" class="lbl-sm">Signal</text>
+        <line x1="0" y1="54" x2="30" y2="54" class="wire wire-active"/>
+        <text x="36" y="58" class="lbl-sm">Active / HIGH</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="panel">
+    <h2>Simulation Controls</h2>
+    <div class="row">
+      <select id="cropSelect"></select>
+      <div class="toggle-group" style="max-width:150px;">
+        <button id="modeAuto" class="active">Auto</button>
+        <button id="modeManual">Manual</button>
+      </div>
+    </div>
+    <div class="checkbox-row"><input type="checkbox" id="autoDrift" checked><label for="autoDrift">Auto-drift environment</label></div>
+    <div class="slider-row"><div class="row"><span>Soil Moisture (Pot 1)</span><span id="moistLabel">—</span></div>
+      <input type="range" id="moistSlider" min="0" max="100" value="55"></div>
+    <div class="slider-row"><div class="row"><span>Soil pH (Pot 2)</span><span id="phLabel">—</span></div>
+      <input type="range" id="phSlider" min="30" max="90" value="62"></div>
+    <div class="checkbox-row"><input type="checkbox" id="faultSensor"><label for="faultSensor">Simulate DHT22 sensor fault</label></div>
+    <div class="row"><button id="btnManualOn" disabled>Manual ON</button><button id="btnManualOff" disabled>Manual OFF</button></div>
+
+    <div class="row" style="margin-top:10px;">
+      <span id="pumpPill" class="status-pill pill-off">Pump OFF</span>
+      <span id="runtimeVal" style="font-size:.8rem; color:var(--muted);">0s / 20s</span>
+    </div>
+
+    <h2 style="margin-top:14px;">Serial Monitor / Event Log</h2>
+    <div class="log" id="logBox"></div>
+  </div>
+
+</div>
+
+<script>
+const CROPS = [
+  {crop:"Tomato", moistureMin:45, moistureTarget:65, phMin:5.5, phMax:7.0},
+  {crop:"Wheat",  moistureMin:35, moistureTarget:55, phMin:6.0, phMax:7.5},
+  {crop:"Rice",   moistureMin:60, moistureTarget:80, phMin:5.0, phMax:6.5},
+];
+const MAX_RUNTIME = 20;
+const $ = id => document.getElementById(id);
+
+let state = { crop:CROPS[0], mode:'AUTO', pump:false, runtime:0, moisture:55, ph:6.2, sensorFault:false, manualCmd:false };
+
+const cropSelect = $('cropSelect');
+CROPS.forEach((c,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=c.crop; cropSelect.appendChild(o); });
+cropSelect.addEventListener('change', ()=>{ state.crop = CROPS[cropSelect.value]; log(`Crop config sent: ${state.crop.crop}`); });
+
+function log(msg, cls){
+  const box=$('logBox'); const d=document.createElement('div');
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  if(cls) d.className=cls; box.appendChild(d);
+  while(box.children.length>50) box.removeChild(box.firstChild);
+}
+
+$('modeAuto').addEventListener('click', ()=>setMode('AUTO'));
+$('modeManual').addEventListener('click', ()=>setMode('MANUAL'));
+function setMode(m){
+  state.mode=m;
+  $('modeAuto').classList.toggle('active', m==='AUTO');
+  $('modeManual').classList.toggle('active', m==='MANUAL');
+  $('btnManualOn').disabled = m!=='MANUAL';
+  $('btnManualOff').disabled = m!=='MANUAL';
+  log(`Mode -> ${m}`);
+}
+$('btnManualOn').addEventListener('click', ()=>{ state.manualCmd=true; log('BTN Manual ON pressed','pump'); pulseWire('wireBtnOn'); });
+$('btnManualOff').addEventListener('click', ()=>{ state.manualCmd=false; log('BTN Manual OFF pressed','pump'); pulseWire('wireBtnOff'); });
+$('faultSensor').addEventListener('change', e=>{ state.sensorFault=e.target.checked; if(e.target.checked) log('DHT22 fault injected','alert'); });
+['moistSlider','phSlider'].forEach(id=>$(id).addEventListener('input', ()=>{ $('autoDrift').checked=false; }));
+
+function pulseWire(id){
+  const el = $(id); if(!el) return;
+  el.classList.add('wire-active');
+  setTimeout(()=>el.classList.remove('wire-active'), 400);
+}
+
+function drift(){
+  if($('autoDrift').checked){
+    state.moisture += state.pump ? (1.2+Math.random()*0.8) : -(0.3+Math.random()*0.4);
+    state.moisture = Math.max(0, Math.min(100, state.moisture));
+    state.ph += (Math.random()-0.5)*0.03;
+    state.ph = Math.max(3, Math.min(9, state.ph));
+    $('moistSlider').value = Math.round(state.moisture);
+    $('phSlider').value = Math.round(state.ph*10);
+  } else {
+    state.moisture = Number($('moistSlider').value);
+    state.ph = Number($('phSlider').value)/10;
+  }
+}
+
+function decide(){
+  const c = state.crop;
+  if(state.moisture < c.moistureMin) return true;
+  if(state.moisture >= c.moistureTarget) return false;
+  return state.pump;
+}
+
+function tick(){
+  drift();
+  let desired;
+  if(state.mode==='AUTO'){ desired = state.sensorFault ? false : decide(); }
+  else { desired = state.sensorFault ? false : state.manualCmd; }
+
+  let forced=false, reason='';
+  if(state.sensorFault){ forced=true; reason='sensor fault'; }
+  if(state.runtime>=MAX_RUNTIME){ forced=true; reason='max runtime'; }
+
+  const prev = state.pump;
+  state.pump = forced ? false : desired;
+  if(state.pump && !prev){ state.runtime=0; log('Relay energized -> Pump ON','pump'); pulseWire('wireRelay'); }
+  if(!state.pump && prev){ log(`Relay de-energized -> Pump OFF${forced? ' ('+reason+')':''}`, forced?'alert':'pump'); state.runtime=0; }
+  if(state.pump) state.runtime++;
+
+  render();
+}
+
+function render(){
+  const c = state.crop;
+  $('moistLabel').textContent = Math.round(state.moisture)+'%';
+  $('phLabel').textContent = state.ph.toFixed(1);
+  $('runtimeVal').textContent = `${state.runtime}s / ${MAX_RUNTIME}s`;
+
+  const pill = $('pumpPill');
+  if(state.pump){ pill.className='status-pill pill-on'; pill.textContent='Pump ON'; }
+  else if(state.sensorFault){ pill.className='status-pill pill-danger'; pill.textContent='Pump OFF (fault)'; }
+  else { pill.className='status-pill pill-off'; pill.textContent='Pump OFF'; }
+
+  // Pump LED in diagram
+  $('pumpLED').setAttribute('class', state.pump ? 'led-on' : 'led-off');
+
+  // Potentiometer knob rotation (visual angle based on value)
+  const moistAngle = (state.moisture/100)*70 - 35;
+  $('pot1knob').setAttribute('transform', `rotate(${moistAngle} 115 108)`);
+  const phAngle = ((state.ph-3)/6)*70 - 35;
+  $('pot2knob').setAttribute('transform', `rotate(${phAngle} 115 198)`);
+
+  // LCD text
+  const phOK = state.ph >= c.phMin && state.ph <= c.phMax;
+  $('lcdLine1').textContent = `M:${Math.round(state.moisture)}% P:${state.ph.toFixed(1)}`;
+  $('lcdLine2').textContent = state.sensorFault ? 'SENSOR FAULT!' : `Pump:${state.pump?'ON ':'OFF'} pH ${phOK?'OK':'WARN'}`;
+
+  // moisture wire highlight when actively driving relay
+  $('wireMoist').setAttribute('class', 'wire ' + (state.pump ? 'wire-active' : 'wire-signal'));
+}
+
+setMode('AUTO');
+log('Circuit powered on. Arduino initialized.');
+render();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

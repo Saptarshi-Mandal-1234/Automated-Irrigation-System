@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Irrigation Control — Mobile App</title>
+<style>
+  :root{
+    --bg:#0f1418; --panel:#171e24; --panel2:#1d262e; --border:#2a353d;
+    --accent:#3ddc97; --warn:#f2b134; --danger:#e05a5a; --text:#e8eef1; --muted:#8ea0a8; --blue:#4fa3d1;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){ --bg:#f4f7f8; --panel:#ffffff; --panel2:#eef2f3; --border:#dbe3e6; --text:#16232b; --muted:#5a6b72; }
+  }
+  :root[data-theme="dark"]{ --bg:#0f1418; --panel:#171e24; --text:#e8eef1; }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+       max-width:420px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column;}
+  header{padding:16px 16px 10px; display:flex; align-items:center; justify-content:space-between;}
+  header h1{font-size:1.05rem; margin:0;}
+  .conn-pill{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:0.72rem; font-weight:600;}
+  .pill-on{background:rgba(61,220,151,.15); color:var(--accent);}
+  .pill-off{background:rgba(142,160,168,.15); color:var(--muted);}
+  .pill-danger{background:rgba(224,90,90,.18); color:var(--danger);}
+  .dot{width:7px; height:7px; border-radius:50%; display:inline-block;}
+  .dot-on{background:var(--accent); box-shadow:0 0 6px var(--accent);}
+  .dot-off{background:var(--muted);}
+  main{flex:1; padding:0 16px 90px; overflow-y:auto;}
+  .screen{display:none;}
+  .screen.active{display:block;}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:14px;}
+  .card h2{font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px;}
+  button{font-family:inherit; font-size:.92rem; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); padding:11px 14px; cursor:pointer; width:100%;}
+  button.primary{background:var(--accent); color:#04241a; border:none; font-weight:700;}
+  button.danger{background:var(--danger); color:#2b0000; border:none; font-weight:700;}
+  button:disabled{opacity:.45;}
+  select{width:100%; font-family:inherit; font-size:.92rem; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); padding:11px 14px;}
+  .row{display:flex; gap:10px;}
+  .row > *{flex:1;}
+  .metrics-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .metric{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px 12px;}
+  .metric .label{font-size:.68rem; color:var(--muted); text-transform:uppercase;}
+  .metric .value{font-size:1.3rem; font-weight:700;}
+  .bar-wrap{background:var(--panel2); border-radius:8px; height:8px; overflow:hidden; margin-top:6px;}
+  .bar{height:100%; background:var(--blue); transition:width .4s;}
+  .req-list{font-size:.82rem; color:var(--muted); line-height:1.6;}
+  .req-list b{color:var(--text);}
+  .toggle-group{display:flex; gap:8px; margin-bottom:14px;}
+  .toggle-group button{flex:1;}
+  .toggle-group button.active{background:var(--accent); color:#04241a; border-color:var(--accent); font-weight:700;}
+  .alert-item{padding:10px; border-radius:10px; background:var(--panel2); border:1px solid var(--border); margin-bottom:8px; font-size:.85rem;}
+  .alert-item.danger{border-color:var(--danger); color:var(--danger);}
+  nav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:420px;
+      background:var(--panel); border-top:1px solid var(--border); display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
+  nav button{background:none; border:none; flex:1; color:var(--muted); font-size:.7rem; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 0;}
+  nav button.active{color:var(--accent); font-weight:700;}
+  nav button .ic{font-size:1.15rem;}
+  .empty-note{color:var(--muted); font-size:.82rem; text-align:center; padding:30px 10px;}
+  code.small{font-size:.72rem; color:var(--muted); word-break:break-all;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌱 Irrigation Control</h1>
+  <span id="connPill" class="conn-pill pill-off"><span class="dot dot-off"></span> Disconnected</span>
+</header>
+
+<main>
+
+  <!-- SCREEN: Connect -->
+  <section class="screen active" id="screen-connect">
+    <div class="card">
+      <h2>ESP32 Connection</h2>
+      <p style="font-size:.85rem; color:var(--muted); margin-top:0;">Connects over Bluetooth Low Energy to an ESP32 advertising the <b>Irrigation Service</b>. Requires Chrome/Edge on Android or desktop (Web Bluetooth is not supported on iOS Safari).</p>
+      <button class="primary" id="btnConnect">Scan &amp; Connect</button>
+      <button id="btnDemo" style="margin-top:8px;">Use Demo Mode (no hardware)</button>
+      <div id="connError" style="color:var(--danger); font-size:.8rem; margin-top:10px;"></div>
+    </div>
+    <div class="card">
+      <h2>Service UUIDs (must match firmware)</h2>
+      <div class="req-list">
+        Service: <code class="small" id="uuidService"></code><br>
+        CropConfigChar (write): <code class="small" id="uuidCrop"></code><br>
+        SensorDataChar (notify): <code class="small" id="uuidSensor"></code><br>
+        ManualControlChar (write): <code class="small" id="uuidManual"></code>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN: Crop -->
+  <section class="screen" id="screen-crop">
+    <div class="card">
+      <h2>Select Crop</h2>
+      <select id="cropSelect"></select>
+      <div class="req-list" id="cropReq" style="margin-top:10px;"></div>
+      <button class="primary" id="btnSendCrop" style="margin-top:12px;">Send Config to ESP32</button>
+    </div>
+  </section>
+
+  <!-- SCREEN: Dashboard -->
+  <section class="screen" id="screen-dashboard">
+    <div class="card">
+      <h2>Mode</h2>
+      <div class="toggle-group">
+        <button id="modeAuto" class="active">Auto</button>
+        <button id="modeManual">Manual</button>
+      </div>
+      <div class="row">
+        <button id="btnManualOn" disabled>Pump ON</button>
+        <button id="btnManualOff" disabled>Pump OFF</button>
+      </div>
+      <button class="danger" id="btnEstop" style="margin-top:8px;">Emergency Stop</button>
+    </div>
+    <div class="card">
+      <h2>Live Sensor Data</h2>
+      <div class="metrics-grid">
+        <div class="metric">
+          <div class="label">Soil Moisture</div>
+          <div class="value" id="mMoist">—%</div>
+          <div class="bar-wrap"><div class="bar" id="mMoistBar" style="width:0%"></div></div>
+        </div>
+        <div class="metric">
+          <div class="label">Soil pH</div>
+          <div class="value" id="mPH">—</div>
+          <div style="font-size:.78rem;" id="mPHStatus">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Temperature</div>
+          <div class="value" id="mTemp">—°C</div>
+        </div>
+        <div class="metric">
+          <div class="label">Humidity</div>
+          <div class="value" id="mHum">—%</div>
+        </div>
+      </div>
+      <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
+        <span id="pumpPill" class="conn-pill pill-off"><span class="dot dot-off"></span> Pump OFF</span>
+        <span style="font-size:.78rem; color:var(--muted);" id="runtimeVal">0s runtime</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN: Alerts -->
+  <section class="screen" id="screen-alerts">
+    <div class="card">
+      <h2>Alerts &amp; Log</h2>
+      <div id="alertList"><div class="empty-note">No alerts yet</div></div>
+    </div>
+  </section>
+
+</main>
+
+<nav>
+  <button data-screen="screen-connect" class="active"><span class="ic">🔗</span>Connect</button>
+  <button data-screen="screen-crop"><span class="ic">🌾</span>Crop</button>
+  <button data-screen="screen-dashboard"><span class="ic">📊</span>Dashboard</button>
+  <button data-screen="screen-alerts"><span class="ic">⚠️</span>Alerts</button>
+</nav>
+
+<script>
+/* ---------------- BLE contract (must match ESP32 firmware) ---------------- */
+const SERVICE_UUID       = '6e400001-b5a3-f393-e0a9-e50e24dcca9e'; // Nordic UART-style base
+const CROP_CONFIG_UUID   = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // write
+const SENSOR_DATA_UUID   = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // notify
+const MANUAL_CTRL_UUID   = '6e400004-b5a3-f393-e0a9-e50e24dcca9e'; // write
+
+document.getElementById('uuidService').textContent = SERVICE_UUID;
+document.getElementById('uuidCrop').textContent = CROP_CONFIG_UUID;
+document.getElementById('uuidSensor').textContent = SENSOR_DATA_UUID;
+document.getElementById('uuidManual').textContent = MANUAL_CTRL_UUID;
+
+const CROPS = [
+  {crop:"Tomato", moistureMin:45, moistureTarget:65, phMin:5.5, phMax:7.0},
+  {crop:"Wheat",  moistureMin:35, moistureTarget:55, phMin:6.0, phMax:7.5},
+  {crop:"Rice",   moistureMin:60, moistureTarget:80, phMin:5.0, phMax:6.5},
+];
+
+const $ = id => document.getElementById(id);
+let ble = { device:null, server:null, cropChar:null, sensorChar:null, manualChar:null, connected:false };
+let demo = { active:false, timer:null, moisture:55, ph:6.2, pump:false, runtime:0, crop:CROPS[0] };
+let mode = 'AUTO';
+
+/* ---------------- Navigation ---------------- */
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    btn.classList.add('active');
+    $(btn.dataset.screen).classList.add('active');
+  });
+});
+
+/* ---------------- Crop screen ---------------- */
+const cropSelect = $('cropSelect');
+CROPS.forEach((c,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=c.crop; cropSelect.appendChild(o); });
+function renderCropReq(){
+  const c = CROPS[cropSelect.value];
+  $('cropReq').innerHTML = `<b>${c.crop}</b> — moisture min <b>${c.moistureMin}%</b>, target <b>${c.moistureTarget}%</b><br>pH range <b>${c.phMin}–${c.phMax}</b>`;
+}
+cropSelect.addEventListener('change', renderCropReq);
+renderCropReq();
+
+$('btnSendCrop').addEventListener('click', async ()=>{
+  const c = CROPS[cropSelect.value];
+  demo.crop = c;
+  const payload = JSON.stringify({crop:c.crop, moistureMin:c.moistureMin, moistureTarget:c.moistureTarget, phMin:c.phMin, phMax:c.phMax});
+  if(ble.connected && ble.cropChar){
+    await ble.cropChar.writeValue(new TextEncoder().encode(payload));
+    addAlert(`Crop config sent to ESP32: ${c.crop}`);
+  } else if(demo.active){
+    addAlert(`[Demo] Crop config applied: ${c.crop}`);
+  } else {
+    addAlert('Not connected — connect or use Demo Mode first.', true);
+  }
+});
+
+/* ---------------- Connect screen ---------------- */
+$('btnConnect').addEventListener('click', async ()=>{
+  $('connError').textContent = '';
+  if(!navigator.bluetooth){
+    $('connError').textContent = 'Web Bluetooth is not supported in this browser. Try Chrome on Android/desktop, or use Demo Mode.';
+    return;
+  }
+  try{
+    ble.device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SERVICE_UUID] }],
+      optionalServices: [SERVICE_UUID]
+    });
+    ble.device.addEventListener('gattserverdisconnected', onDisconnected);
+    ble.server = await ble.device.gatt.connect();
+    const service = await ble.server.getPrimaryService(SERVICE_UUID);
+    ble.cropChar = await service.getCharacteristic(CROP_CONFIG_UUID);
+    ble.sensorChar = await service.getCharacteristic(SENSOR_DATA_UUID);
+    ble.manualChar = await service.getCharacteristic(MANUAL_CTRL_UUID);
+    await ble.sensorChar.startNotifications();
+    ble.sensorChar.addEventListener('characteristicvaluechanged', onSensorNotify);
+    ble.connected = true;
+    demo.active = false;
+    clearInterval(demo.timer);
+    setConnUI(true);
+    addAlert(`Connected to ${ble.device.name || 'ESP32 device'}`);
+  } catch(err){
+    $('connError').textContent = 'Connection failed: ' + err.message;
+  }
+});
+
+$('btnDemo').addEventListener('click', ()=>{
+  demo.active = true;
+  ble.connected = false;
+  setConnUI(true, true);
+  addAlert('Demo Mode active — simulating ESP32 responses locally.');
+  clearInterval(demo.timer);
+  demo.timer = setInterval(demoTick, 1000);
+});
+
+function onDisconnected(){
+  ble.connected = false;
+  setConnUI(false);
+  addAlert('ESP32 disconnected.', true);
+}
+
+function setConnUI(connected, isDemo){
+  const pill = $('connPill');
+  if(connected){
+    pill.className = isDemo ? 'conn-pill pill-on' : 'conn-pill pill-on';
+    pill.innerHTML = `<span class="dot dot-on"></span> ${isDemo ? 'Demo Mode' : 'Connected'}`;
+  } else {
+    pill.className = 'conn-pill pill-off';
+    pill.innerHTML = '<span class="dot dot-off"></span> Disconnected';
+  }
+  $('btnManualOn').disabled = mode !== 'MANUAL';
+  $('btnManualOff').disabled = mode !== 'MANUAL';
+}
+
+/* ---------------- Sensor data handling ---------------- */
+function onSensorNotify(event){
+  const text = new TextDecoder().decode(event.target.value);
+  try{
+    const data = JSON.parse(text);
+    updateDashboard(data);
+  } catch(e){ /* ignore malformed packet */ }
+}
+
+function updateDashboard(data){
+  $('mMoist').textContent = data.soilMoisture + '%';
+  $('mMoistBar').style.width = data.soilMoisture + '%';
+  $('mPH').textContent = Number(data.soilPH).toFixed(1);
+  $('mPHStatus').textContent = data.phStatus || '';
+  $('mPHStatus').style.color = (data.phStatus === 'pH Suitable') ? 'var(--accent)' : 'var(--warn)';
+  $('mTemp').textContent = Number(data.temperature).toFixed(1) + '°C';
+  $('mHum').textContent = Math.round(data.humidity) + '%';
+  const pill = $('pumpPill');
+  if(data.pumpStatus === 'ON'){ pill.className='conn-pill pill-on'; pill.innerHTML='<span class="dot dot-on"></span> Pump ON'; }
+  else { pill.className='conn-pill pill-off'; pill.innerHTML='<span class="dot dot-off"></span> Pump OFF'; }
+}
+
+/* ---------------- Mode + manual controls ---------------- */
+$('modeAuto').addEventListener('click', ()=>setMode('AUTO'));
+$('modeManual').addEventListener('click', ()=>setMode('MANUAL'));
+function setMode(m){
+  mode = m;
+  $('modeAuto').classList.toggle('active', m==='AUTO');
+  $('modeManual').classList.toggle('active', m==='MANUAL');
+  $('btnManualOn').disabled = m!=='MANUAL';
+  $('btnManualOff').disabled = m!=='MANUAL';
+  sendManual({mode:m});
+}
+$('btnManualOn').addEventListener('click', ()=>sendManual({mode:'MANUAL', pump:'ON'}));
+$('btnManualOff').addEventListener('click', ()=>sendManual({mode:'MANUAL', pump:'OFF'}));
+$('btnEstop').addEventListener('click', ()=>{ sendManual({command:'ESTOP'}); addAlert('Emergency stop sent', true); });
+
+async function sendManual(obj){
+  const payload = JSON.stringify(obj);
+  if(ble.connected && ble.manualChar){
+    await ble.manualChar.writeValue(new TextEncoder().encode(payload));
+  } else if(demo.active){
+    if(obj.pump === 'ON') demo.pump = true;
+    if(obj.pump === 'OFF') demo.pump = false;
+    if(obj.command === 'ESTOP') demo.pump = false;
+  }
+}
+
+/* ---------------- Alerts ---------------- */
+function addAlert(msg, danger){
+  const list = $('alertList');
+  if(list.querySelector('.empty-note')) list.innerHTML = '';
+  const el = document.createElement('div');
+  el.className = 'alert-item' + (danger ? ' danger' : '');
+  el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  list.prepend(el);
+}
+
+/* ---------------- Demo mode simulation (no hardware) ---------------- */
+function demoTick(){
+  const c = demo.crop;
+  demo.moisture += demo.pump ? (1.2+Math.random()*0.8) : -(0.3+Math.random()*0.4);
+  demo.moisture = Math.max(0, Math.min(100, demo.moisture));
+  demo.ph += (Math.random()-0.5)*0.03;
+  demo.ph = Math.max(3, Math.min(9, demo.ph));
+
+  if(mode === 'AUTO'){
+    if(demo.moisture < c.moistureMin) demo.pump = true;
+    else if(demo.moisture >= c.moistureTarget) demo.pump = false;
+  }
+  demo.runtime = demo.pump ? demo.runtime+1 : 0;
+
+  const phOK = demo.ph >= c.phMin && demo.ph <= c.phMax;
+  updateDashboard({
+    soilMoisture: Math.round(demo.moisture),
+    soilPH: demo.ph,
+    phStatus: phOK ? 'pH Suitable' : 'pH Warning',
+    temperature: 28 + Math.sin(Date.now()/9000)*3,
+    humidity: 55 + Math.cos(Date.now()/7000)*8,
+    pumpStatus: demo.pump ? 'ON' : 'OFF'
+  });
+  $('runtimeVal').textContent = demo.runtime + 's runtime';
+}
+
+/* ---------------- Auto-start demo mode (BLE is blocked in this viewer) ---------------- */
+window.addEventListener('DOMContentLoaded', () => {
+  $('btnDemo').click();
+  document.querySelector('nav button[data-screen="screen-dashboard"]').click();
+});
+</script>
+</body>
+</html>
